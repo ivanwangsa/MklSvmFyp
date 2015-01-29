@@ -26,6 +26,19 @@ class BinaryClassifier(object):
         predicted_y = self.predict(X)
         return float(sum(y == predicted_y))/len(y)
     
+    def visualize(self, xrg = (-1.0, 1.0), yrg = (-1.0, 1.0), size = (10, 10)):
+        num_rows = size[0] + 1
+        num_cols = size[1] + 1
+        x = np.linspace(xrg[0],xrg[1],num = num_rows)
+        y = np.linspace(yrg[0],yrg[1],num = num_cols)
+        X, Y = np.meshgrid(x,y)
+        positions = np.vstack([X.ravel(), Y.ravel()]).T
+        Z = np.reshape(self.predict(positions), np.shape(X))
+        
+        plt.figure()
+        plt.contour(X, Y, Z, levels=[ -EPS, EPS])
+        plt.show()
+    
     def __init__(self):
         pass
     
