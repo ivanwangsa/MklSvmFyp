@@ -1,0 +1,65 @@
+\documentclass[11pt]{article}%Don't change
+\usepackage{pstricks,pstricks-add,pst-math,pst-xkey}
+\usepackage{amsfonts,amsmath,amsthm,amssymb,amsrefs,array,dcolumn,epsfig,empheq}%Don't change
+
+%\setlength{\textwidth}{6in}
+%\setlength{\textheight}{9.25in}
+%\setlength{\topmargin}{0in}
+%\setlength{\headheight}{0in}
+%\setlength{\headsep}{0in}
+%\setlength{\parskip}{10pt}
+%\setlength{\labelsep}{3pt}
+%\setlength{\parindent}{0pt}
+%\setlength{\medskipamount}{3ex}
+%\setlength{\smallskipamount}{1ex}
+
+%\pagestyle{fancy}
+%\fancyhf{}
+%\rhead{Ivan Wangsaciptalingga}
+%\lhead{Volatility Index Futures}
+%\cfoot{Page \thepage}
+
+\def\nn{\mathbb{N}}
+\def\rr{\mathbb{R}}
+\def\zz{\mathbb{Z}}
+\def\qq{\mathbb{Q}}
+\def\pp{\mathbb{P}}
+\def\cc{\mathbb{C}}
+\def\ss{\mathbb{S}}
+
+\def\cl{{\bf\noindent\par Claim:  }\nopagebreak}
+\def\soln{{\bf\noindent\par Solution.  }\nopagebreak}
+\def\sol1{{\bf\noindent\par First Solution.  }\nopagebreak}
+\def\sol2{{\bf\noindent\par Second Solution.  }\nopagebreak}
+\def\pf{{\bf\noindent\par Proof:  }\nopagebreak}
+
+\begin{document}
+
+\sffamily
+
+\begin{center}
+\LARGE \textbf{Final Year Project Proposal}
+\end{center}
+
+\bigskip
+
+
+\noindent \large \textbf{Title}: Multiple Kernel Learning Methods on Support Vector Machines
+
+\noindent \textbf{Supervisor}: Assoc Prof Chua Chek Beng
+
+\noindent \textbf{Proposer}: Ivan Wangsaciptalingga (U1140103E)
+
+\bigskip
+
+\bigskip
+
+\normalsize
+
+Support Vector Machine (SVM) is a powerful method in machine learning tasks. Firstly used in binary classification method, it has since been extended to general kernel-based learning machines used in one-class classification, multi-class classification, as well as regression learning. The power of SVM lies on its ability to learn complicated models whilst still guaranteeing SVM's ability to generalize, compared to other models such as perceptron and linear models. This ability is due to its use of kernel function; a kernel decides on the so-called complexity of the model used by SVM in classifying data points.
+
+Of course with this comes a natural question: which kernel is best suited for learning a certain problem? There are multiple choices of kernel functions; polynomial, Gaussian, and sigmoid are three of the best known kernels for general purpose learning. Multiple Kernel Learning (MKL) method allows one to combine these kernels, and multiple studies and algorithms have been conducted on what criteria should this combination of kernels satisfy. More importantly, with this use of even more complicated kernels and models, does this affect the ability of SVM to generalize?
+
+We propose to research on various MKL methods and its variations, in order to answer these questions. We will solve these MKL methods, which we expect will boil down to convex optimization problems; in particular, quadratic and linear optimizations. We will then use these methods and apply them in real datasets, comparing the result of the training of one MKL method against the other, and other methods commonly used in machine learning.
+
+\end{document}
