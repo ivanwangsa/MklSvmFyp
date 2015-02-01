@@ -9,6 +9,7 @@ from cvxopt import solvers, matrix, spmatrix
 import mosek
 import numpy as np
 import matplotlib.pyplot as plt
+import operator
 
 solvers.options['show_progress'] = False
 solvers.options['MOSEK'] = {mosek.iparam.log: 0}
@@ -26,7 +27,8 @@ class BinaryClassifier(object):
         predicted_y = self.predict(X)
         return float(sum(y == predicted_y))/len(y)
     
-    def visualize(self, xrg = (-1.0, 1.0), yrg = (-1.0, 1.0), size = (10, 10)):
+    def visualize_2d(self, xrg = (-1.0, 1.0), yrg = (-1.0, 1.0), size = (10, 10)):
+        fig, axs = plt.subplots()
         num_rows = size[0] + 1
         num_cols = size[1] + 1
         x = np.linspace(xrg[0],xrg[1],num = num_rows)
@@ -35,8 +37,8 @@ class BinaryClassifier(object):
         positions = np.vstack([X.ravel(), Y.ravel()]).T
         Z = np.reshape(self.predict(positions), np.shape(X))
         
-        plt.figure()
-        plt.contour(X, Y, Z, levels=[ -EPS, EPS])
+        cs = axs.contourf(X, Y, Z, levels=np.linspace(-1, 1, num = 21))
+        fig.colorbar(cs, ax = axs)
         plt.show()
     
     def __init__(self):
@@ -100,7 +102,7 @@ class Kernel(object):
 class Svm(BinaryClassifier):
     def _compute_gram_matrix(self):
         n = self._X.shape[0]
-        K = np.zeros(n, n)
+        K = np.zeros((n, n))
         for i in range(n):
             for j in range(n):
                 K[i,j] = self._kernel(self._X[i], self._X[j])
@@ -171,16 +173,16 @@ class HardMarginSvm(Svm):
         
 
 class SoftMargin1Svm(Svm):
-    def fit(self, X, y):
+    def fit(self, X, _y):
         self._X = X
-        self._y = y
+        self._y = _y
         
         n = X.shape[0]
-        yy = np.array([y]).T
+        yy = np.array([_y]).T
         
         K = self._compute_gram_matrix()
         
-        P = matrix(np.outer(y,y) * K)
+        P = matrix(np.outer(_y,_y) * K)
         q = matrix(-1., (n,1))
         
         G = matrix(np.vstack((-np.eye(n), np.eye(n))))
@@ -202,11 +204,11 @@ class SoftMargin1Svm(Svm):
         nonbound_points_numbers = 0
         
         for k in range(n):
-            if self.dual_variables[k] > EPS and self.dual_variables[k] < self.constraint_ - EPS:
+            if self.dual_variables[k] > EPS and self.dual_variables[k] < self._constraint - EPS:
                 nonbound_points_numbers += 1
-                this_bias = self.y_[k]
+                this_bias = self._y[k]
                 for i in range(n):
-                    this_bias -= self.dual_variables[i] * y[i] * self.kernel_(X[i], X[k])
+                    this_bias -= self.dual_variables[i] * self._y[i] * self._kernel(X[i], X[k])
                 self.bias += this_bias
         try:
             self.bias /= nonbound_points_numbers
@@ -235,7 +237,7 @@ class SoftMargin2Svm(Svm):
         
     def __init__(self, kernel = Kernel.gaussian(1.0), constraint = 1.0):
         def new_kernel(x, y):
-            if np.equal(x, y):
+            if reduce(operator.and_, np.equal(x, y)):
                 return 1/(2*constraint) + kernel(x,y)
             else:
                 return kernel(x,y)
