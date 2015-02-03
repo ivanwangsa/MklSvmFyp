@@ -10,6 +10,7 @@ import mosek
 import numpy as np
 import matplotlib.pyplot as plt
 import operator
+import sklearn.svm
 
 solvers.options['show_progress'] = False
 solvers.options['MOSEK'] = {mosek.iparam.log: 0}
@@ -39,11 +40,16 @@ class BinaryClassifier(object):
         
         cs = axs.contourf(X, Y, Z, levels=np.linspace(-1, 1, num = 21))
         fig.colorbar(cs, ax = axs)
-        plt.show()
+        
+        total_indices = np.array(range(len(self._y)))
+        pos = total_indices[self._y > 0]
+        neg = total_indices[self._y < 0]
+        axs.plot(self._X[pos, 0], self._X[pos, 1], 'ro', mew = 1, ms = 5)
+        axs.plot(self._X[neg, 0], self._X[neg, 1], 'bo', mew = 1, ms = 5)
+        plt.show(block = False)
     
     def __init__(self):
-        pass
-    
+        pass    
 
 class NearestNeighbour(BinaryClassifier):
     def fit(self, X, y):
@@ -72,6 +78,7 @@ class NearestNeighbour(BinaryClassifier):
         return np.sign(y)
     
     def __init__(self, number_of_neighbors = 3):
+        super(self.__class__, self).__init__()
         self._num_of_neighbors = number_of_neighbors
 
 class Kernel(object):
@@ -88,25 +95,30 @@ class Kernel(object):
         return result
 
     @staticmethod
-    def gaussian(sigma):
+    def gaussian(sigma = 1.):
         def result(x,y):
             return np.exp(-np.linalg.norm(x-y)/(2 * sigma ** 2))
         return result;
     
     @staticmethod
-    def sigmoid(kappa, a0 = 0):
+    def sigmoid(kappa = 1., a0 = -1.):
         def result(x,y):
             return np.tanh(kappa * np.dot(x.T, y) + a0)
         return result
         
 class Svm(BinaryClassifier):
+    # TO DO: TOO SLOW!
     def _compute_gram_matrix(self):
-        n = self._X.shape[0]
+        kernel = self._kernel
+        X = self._X
+        n = X.shape[0]
         K = np.zeros((n, n))
-        for i in range(n):
-            for j in range(n):
-                K[i,j] = self._kernel(self._X[i], self._X[j])
+        for i in xrange(n):
+            for j in xrange(n):
+                K[i,j] = kernel(X[i], X[j])
         return K
+    def __init__(self):
+        pass        
 
 class HardMarginSvm(Svm): 
     def fit(self, X, y):
@@ -144,7 +156,7 @@ class HardMarginSvm(Svm):
         for i in neg:
             tmp = 0
             for j in self.support_vector_indices:
-                tmp += self.dual_variables[j]*y[j]*np.dot(X[i,], X[j,].T)
+                tmp += self.dual_variables[j] * y[j] * np.dot(X[i,], X[j,].T)
             if opt == None or opt < tmp:
                 opt = tmp        
         self.bias += opt        
@@ -152,7 +164,7 @@ class HardMarginSvm(Svm):
         for i in pos:
             tmp = 0
             for j in self.support_vector_indices:
-                tmp += self.dual_variables[j]*y[j]*np.dot(X[i,], X[j,].T)
+                tmp += self.dual_variables[j] * y[j] * np.dot(X[i,], X[j,].T)
             if opt == None or opt > tmp:
                 opt = tmp        
         self.bias += opt     
@@ -169,6 +181,7 @@ class HardMarginSvm(Svm):
         return np.sign(signals)
     
     def __init__(self, kernel = Kernel.gaussian(1.0)):
+        super(self.__class__, self).__init__()
         self._kernel = kernel
         
 
@@ -203,8 +216,8 @@ class SoftMargin1Svm(Svm):
         
         nonbound_points_numbers = 0
         
-        for k in range(n):
-            if self.dual_variables[k] > EPS and self.dual_variables[k] < self._constraint - EPS:
+        for k in self.support_vector_indices:
+            if self.dual_variables[k] < self._constraint - EPS:
                 nonbound_points_numbers += 1
                 this_bias = self._y[k]
                 for i in range(n):
@@ -225,26 +238,45 @@ class SoftMargin1Svm(Svm):
         return np.sign(signals)
     
     def __init__(self, kernel = Kernel.gaussian(1.0), constraint = 1.0):
+        super(self.__class__, self).__init__()
         self._constraint = constraint
         self._kernel = kernel
         
-class SoftMargin2Svm(Svm):
-    def fit(self, X, y):
-        self._hard_margin_svm.fit(X, y)
     
-    def predict(self, X):
-        return self._hard_margin_svm.predict(X)
-        
-    def __init__(self, kernel = Kernel.gaussian(1.0), constraint = 1.0):
-        def new_kernel(x, y):
-            if reduce(operator.and_, np.equal(x, y)):
-                return 1/(2*constraint) + kernel(x,y)
-            else:
-                return kernel(x,y)
-        self._hard_margin_svm = HardMarginSvm(new_kernel)
-        
 class SilpMklSoftMargin1Svm(Svm):
-    def __init__(self, kernels, constraint):
+    # uses scikit-learn
+    
+    def _compute_gram_matrices(self):
+        X = self._X
+        n = self._X.shape[0]
+        kernels = self._kernels
+        res = [np.matrix(np.zeros((n,n))) for i in range(len(kernels))]
+        for m in range(len(kernels)):
+            for i in xrange(n):
+                for j in xrange(n):
+                    res[m][i,j] = kernels[m](X[i], X[j])
+        self._gram_matrices = tuple(res)
+    
+    def fit(self, X, y):
+        # TODO: Finish this!
+        self._X = X
+        self._y = y
+        K = X.shape[1]
+        self._compute_gram_matrices()
+        
+        def S_k(alpha, k):
+            kernel_k = self._kernels[k]
+            pass
+        S = [1.]
+        theta = [-1e9]
+        beta = np.repeat(1./K, K)
+        t = 1
+        while True:
+            pass
+        
+    def __init__(self, kernels, constraint = 1., epsilon = 0.01):
         self._kernels = kernels
         self._constraint = constraint
+        self._epsilon = epsilon
+    
         
