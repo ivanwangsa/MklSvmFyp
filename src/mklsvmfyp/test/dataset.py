@@ -5,6 +5,9 @@ Created on 2 Feb, 2015
 '''
 import csv
 import numpy as np
+from mklsvmfyp.classifier import Kernel, SilpMklSvm, SoftMargin1Svm
+from sklearn.svm.classes import SVC
+import os
 
 class DataSet:
     
@@ -29,7 +32,8 @@ class DataSet:
         return (training_set, validation_set, test_set)
         
     def _load_ionosphere(self):
-        with open('ionosphere.data') as csvfile:
+        __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
+        with open(os.path.join(__location__, 'ionosphere.data')) as csvfile:
             data_reader = csv.reader(csvfile, delimiter = ',')
             self._num_of_feat = 34
             self._num_of_obs = 351
@@ -47,11 +51,3 @@ class DataSet:
         if(dataset == 'ionosphere'):
             self._load_ionosphere()
 
-ionosphere = DataSet()
-(train, valid, test) = ionosphere.retrieve_sets()
-
-import mklsvmfyp.classifier
-
-svm = mklsvmfyp.classifier.SoftMargin1Svm(kernel=mklsvmfyp.classifier.Kernel.gaussian(1.), constraint = 1.)
-svm.fit(train[0], train[1])
-print svm.score(test[0], test[1])

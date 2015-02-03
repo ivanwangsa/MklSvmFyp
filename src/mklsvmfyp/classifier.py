@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import operator
 import sklearn.svm
+from sklearn import svm
 
 solvers.options['show_progress'] = False
 solvers.options['MOSEK'] = {mosek.iparam.log: 0}
@@ -112,11 +113,11 @@ class Svm(BinaryClassifier):
         kernel = self._kernel
         X = self._X
         n = X.shape[0]
-        K = np.zeros((n, n))
+        N = np.zeros((n, n))
         for i in xrange(n):
             for j in xrange(n):
-                K[i,j] = kernel(X[i], X[j])
-        return K
+                N[i,j] = kernel(X[i], X[j])
+        return N
     def __init__(self):
         pass        
 
@@ -128,9 +129,9 @@ class HardMarginSvm(Svm):
         n = X.shape[0]
         yy = np.array([y]).T
         
-        K = self._compute_gram_matrix()
+        N = self._compute_gram_matrix()
         
-        P = matrix(np.outer(y,y) * K)
+        P = matrix(np.outer(y,y) * N)
         q = matrix(-1., (n,1))
         
         G = spmatrix(-1., range(n), range(n))
@@ -193,9 +194,9 @@ class SoftMargin1Svm(Svm):
         n = X.shape[0]
         yy = np.array([_y]).T
         
-        K = self._compute_gram_matrix()
+        N = self._compute_gram_matrix()
         
-        P = matrix(np.outer(_y,_y) * K)
+        P = matrix(np.outer(_y,_y) * N)
         q = matrix(-1., (n,1))
         
         G = matrix(np.vstack((-np.eye(n), np.eye(n))))
@@ -243,7 +244,7 @@ class SoftMargin1Svm(Svm):
         self._kernel = kernel
         
     
-class SilpMklSoftMargin1Svm(Svm):
+class SilpMklSvm(Svm):
     # uses scikit-learn
     
     def _compute_gram_matrices(self):
@@ -261,18 +262,37 @@ class SilpMklSoftMargin1Svm(Svm):
         # TODO: Finish this!
         self._X = X
         self._y = y
-        K = X.shape[1]
         self._compute_gram_matrices()
         
-        def S_k(alpha, k):
-            kernel_k = self._kernels[k]
-            pass
+        K = len(self._gram_matrices)
+        N = X.shape[0]
+        
+        def S_k(support_, dual_coef_, k):
+            combined = zip(support_, dual_coef_[0])
+            combined.sort()
+            combined = zip(*combined)
+            matrix = self._gram_matrices[k]
+            res = np.matrix(combined[1]) * self._gram_matrices[k][combined[0],:][:,combined[0]] * np.matrix(combined[1]).T
+            res -= sum(np.absolute(np.array(combined[1])))
+            return res[0,0]
+        
         S = [1.]
         theta = [-1e9]
         beta = np.repeat(1./K, K)
-        t = 1
+        t = 0
+        svmSolver = svm.SVC(C = self._constraint, kernel = 'precomputed')
         while True:
-            pass
+            t += 1
+            gram_matrix = np.matrix(np.zeros((N, N)))
+            for k in range(K):
+                gram_matrix += beta[k] * self._gram_matrices[k]
+            svmSolver.fit(gram_matrix, self._y)
+            dual_coef = svmSolver.dual_coef_
+            supports = svmSolver.support_
+            S_t = S_k(supports, dual_coef, 0)
+            print S_t
+            break
+            
         
     def __init__(self, kernels, constraint = 1., epsilon = 0.01):
         self._kernels = kernels
