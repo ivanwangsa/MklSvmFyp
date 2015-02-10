@@ -263,37 +263,65 @@ class SilpMklSvm(Svm):
         self._X = X
         self._y = y
         self._compute_gram_matrices()
-        
         K = len(self._gram_matrices)
         N = X.shape[0]
         
         def S_k(support_, dual_coef_, k):
-            combined = zip(support_, dual_coef_[0])
+            # support_ are of the indices of support vectors
+            # dual_coef_ are alpha * y
+            
+            combined = zip(support_, dual_coef_)
             combined.sort()
-            combined = zip(*combined)
-            matrix = self._gram_matrices[k]
-            res = np.matrix(combined[1]) * self._gram_matrices[k][combined[0],:][:,combined[0]] * np.matrix(combined[1]).T
-            res -= sum(np.absolute(np.array(combined[1])))
+            combined = zip(*combined) # unzip combined
+            # combined[0] : support indices, combined[1] : dual_coef_
+            indices = combined[0]
+            kernel_matrix = self._gram_matrices[k]
+            subset_kernel_matrix = kernel_matrix[indices, :][:, indices]
+            dual_coef = np.matrix(combined[1]).T
+            #print subset_kernel_matrix
+            #print '--------------'
+            #print np.matrix(combined[1]), matrix[combined[0],:][:,combined[0]]
+            #print '--------------'
+            res = 1.0/2 * dual_coef.T * subset_kernel_matrix * dual_coef - np.sum(np.absolute(dual_coef))
             return res[0,0]
         
-        S = [1.]
-        theta = [-1e9]
+        
+        num_of_rows_of_S = 2
+        S = np.zeros((num_of_rows_of_S, K))
+        theta = -1e9
         beta = np.repeat(1./K, K)
         t = 0
         svmSolver = svm.SVC(C = self._constraint, kernel = 'precomputed')
+        A_1 = np.hstack(([[0.]], np.ones((1, K))))
+        A_1 = np.vstack((A_1, -A_1))
+        A_2 = np.hstack( (np.zeros( (K, 1) ), -np.eye(K) ) )
+        A = np.vstack((A_1, A_2))
+        c = np.vstack(([[-1.]], np.zeros((K, 1))))
+        
         while True:
-            t += 1
             gram_matrix = np.matrix(np.zeros((N, N)))
             for k in range(K):
                 gram_matrix += beta[k] * self._gram_matrices[k]
             svmSolver.fit(gram_matrix, self._y)
-            dual_coef = svmSolver.dual_coef_
+            dual_coef = svmSolver.dual_coef_[0]
             supports = svmSolver.support_
-            S_t = S_k(supports, dual_coef, 0)
-            print S_t
-            break
+            if t == num_of_rows_of_S:
+                S = np.vstack((S, np.zeros(S.shape)))
+                num_of_rows_of_S *= 2
+            S[t,] = np.array([S_k(supports, dual_coef, i) for i in range(K)])
+            S_now = np.dot(beta, S[t,])
+            print '>>>', S_now, theta, 1-S_now/theta
+            if np.abs(1-S_now/theta) < EPS:
+                break
+            additional_A = np.hstack( ([1.], -S[t,:] ) )
+            t += 1
+            A = np.vstack((A, additional_A))
+            b = np.vstack((np.array([[1.], [-1.]]), np.zeros((K+t, 1))))
+            sol = solvers.lp(matrix(c), matrix(A), matrix(b), solver='mosek')
+            soln = sol['x']
+            theta = soln[0]
+            beta = np.ravel(soln[1:K+1])            
             
-        
     def __init__(self, kernels, constraint = 1., epsilon = 0.01):
         self._kernels = kernels
         self._constraint = constraint
