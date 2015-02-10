@@ -279,10 +279,6 @@ class SilpMklSvm(Svm):
             kernel_matrix = self._gram_matrices[k]
             subset_kernel_matrix = kernel_matrix[indices, :][:, indices]
             dual_coef = np.matrix(combined[1]).T
-            #print subset_kernel_matrix
-            #print '--------------'
-            #print np.matrix(combined[1]), matrix[combined[0],:][:,combined[0]]
-            #print '--------------'
             res = 1.0/2 * dual_coef.T * subset_kernel_matrix * dual_coef - np.sum(np.absolute(dual_coef))
             return res[0,0]
         
