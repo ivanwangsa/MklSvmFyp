@@ -265,6 +265,7 @@ class SilpMklSvm(Svm):
         self._compute_gram_matrices()
         K = len(self._gram_matrices)
         N = X.shape[0]
+        SILP_EPS = 1e-6
         
         def S_k(support_, dual_coef_, k):
             # support_ are of the indices of support vectors
@@ -285,33 +286,33 @@ class SilpMklSvm(Svm):
             res = 1.0/2 * dual_coef.T * subset_kernel_matrix * dual_coef - np.sum(np.absolute(dual_coef))
             return res[0,0]
         
-        
         num_of_rows_of_S = 2
         S = np.zeros((num_of_rows_of_S, K))
         theta = -1e9
         beta = np.repeat(1./K, K)
         t = 0
-        svmSolver = svm.SVC(C = self._constraint, kernel = 'precomputed')
+        self.single_svm_solver = svm.SVC(C = self._constraint, kernel = 'precomputed')
+        
+        # prepare matrices for LP
         A_1 = np.hstack(([[0.]], np.ones((1, K))))
         A_1 = np.vstack((A_1, -A_1))
         A_2 = np.hstack( (np.zeros( (K, 1) ), -np.eye(K) ) )
         A = np.vstack((A_1, A_2))
         c = np.vstack(([[-1.]], np.zeros((K, 1))))
-        
+               
         while True:
             gram_matrix = np.matrix(np.zeros((N, N)))
             for k in range(K):
                 gram_matrix += beta[k] * self._gram_matrices[k]
-            svmSolver.fit(gram_matrix, self._y)
-            dual_coef = svmSolver.dual_coef_[0]
-            supports = svmSolver.support_
+            self.single_svm_solver.fit(gram_matrix, self._y)
+            dual_coef = self.single_svm_solver.dual_coef_[0]
+            supports = self.single_svm_solver.support_
             if t == num_of_rows_of_S:
                 S = np.vstack((S, np.zeros(S.shape)))
                 num_of_rows_of_S *= 2
             S[t,] = np.array([S_k(supports, dual_coef, i) for i in range(K)])
             S_now = np.dot(beta, S[t,])
-            print '>>>', S_now, theta, 1-S_now/theta
-            if np.abs(1-S_now/theta) < EPS:
+            if np.abs(1-S_now/theta) < SILP_EPS:
                 break
             additional_A = np.hstack( ([1.], -S[t,:] ) )
             t += 1
@@ -320,7 +321,23 @@ class SilpMklSvm(Svm):
             sol = solvers.lp(matrix(c), matrix(A), matrix(b), solver='mosek')
             soln = sol['x']
             theta = soln[0]
-            beta = np.ravel(soln[1:K+1])            
+            beta = np.ravel(soln[1:K+1])           
+        
+        gram_matrix = np.matrix(np.zeros((N, N)))
+        for k in range(K):
+            gram_matrix += beta[k] * self._gram_matrices[k]
+        
+        self.single_svm_solver.fit(gram_matrix, self._y)
+        self._beta = beta
+                
+    def predict(self, X):
+        num_row_test = X.shape[0]
+        num_row_train = self._X.shape[0]
+        kernel_matrix = np.zeros((num_row_test, num_row_train))
+        for i in xrange(num_row_test):
+            for j in xrange(num_row_train):
+                kernel_matrix[i,j] = sum([self._beta[k] * self._kernels[k](X[i, ], self._X[j,]) for k in range(len(self._kernels))])
+        return np.array(self.single_svm_solver.predict(kernel_matrix))
             
     def __init__(self, kernels, constraint = 1., epsilon = 0.01):
         self._kernels = kernels
