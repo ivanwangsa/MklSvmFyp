@@ -358,6 +358,7 @@ class SimpleMklSvm(Svm):
         self._y = y
         self._compute_gram_matrices()
         K = len(self._gram_matrices)
+        self._num_of_kernels = K
         N = X.shape[0]
         
         SMKL_EPS = 1e-6
@@ -365,22 +366,31 @@ class SimpleMklSvm(Svm):
         d = np.repeat(1./K, K)
         terminated = False
         self.single_svm_solver = svm.SVC(C = self._constraint, kernel = 'precomputed')
+                
+        def find_indices_and_dual_coef(gram_matrix):
+            self.single_svm_solver.fit(gram_matrix, self._y)
+            
+            # preparing indices of support vectors and their dual variables, similar to Silp code
+            combined = zip(self.single_svm_solver.support_, self.single_svm_solver.dual_coef_[0])
+            combined.sort()
+            combined = zip(*combined)
+            indices = combined[0]
+            dual_coef = np.matrix(combined[1]).T
+            return indices, dual_coef
         
-        combined_gram_matrix = None
-        
-        def compute_J(indices, dual_coef):
-            subset_gram_matrix = combined_gram_matrix[indices,:][:,indices]
+        def compute_J(gram_matrix, indices, dual_coef):
+            subset_gram_matrix = gram_matrix[indices,:][:,indices]
             res = -1.0/2 * dual_coef.T * subset_gram_matrix * dual_coef + np.sum(np.absolute(dual_coef))
             return res[0,0]
         
         def compute_partials_J(indices, dual_coef):
-            return np.array([-1.0/2 * dual_coef.t * self._gram_matrices[k][indices,:][:,indices] * dual_coef for k in range(K)])
+            return np.array([-1.0/2 * dual_coef.t * self._gram_matrices[k][indices,:][:,indices] * dual_coef for k in range(self._num_of_kernels)])
         
         def compute_direction(partial_derivatives):
-            direction = np.repeat(None, K)
+            direction = np.repeat(None, self._num_of_kernels)
             max_idx = d.argmax()
             direction_mu = 0
-            for i in range(K):
+            for i in range(self._num_of_kernels):
                 if d[i] < SMKL_EPS:
                     direction[i] = 0.
                 elif i != max_idx:
@@ -392,21 +402,16 @@ class SimpleMklSvm(Svm):
             
         while not terminated:
             combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
-            self.single_svm_solver.fit(combined_gram_matrix, y)
+            indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
             
-            # preparing indices of support vectors and their dual variables, similar to Silp code
-            combined = zip(self.single_svm_solver.support_, self.single_svm_solver.dual_coef_[0])
-            combined.sort()
-            combined = zip(*combined)
-            indices = combined[0]
-            dual_coef = np.matrix(combined[1]).T
-            
-            J_d = compute_J(indices, dual_coef)
+            J_d = compute_J(combined_gram_matrix, indices, dual_coef)
             partial_derivatives = compute_partials_J(indices, dual_coef)
+            
             mu, D = compute_direction(partial_derivatives)
             J_dagger = 0
             d_dagger = d
             D_dagger = D
+            gamma_max = None
              
             while J_dagger < J_d: # update descent direction
                 d = d_dagger
@@ -425,17 +430,11 @@ class SimpleMklSvm(Svm):
                 D_dagger[nu] = 0
                 
                 combined_gram_matrix = sum([d_dagger[k] * self._gram_matrices[k] for k in range(K)])
-                self.single_svm_solver.fit(combined_gram_matrix, y)
-                # preparing indices of support vectors and their dual variables, similar to Silp code
-                combined = zip(self.single_svm_solver.support_, self.single_svm_solver.dual_coef_[0])
-                combined.sort()
-                combined = zip(*combined)
-                indices = combined[0]
-                dual_coef = np.matrix(combined[1]).T
-            
+                indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_dagger = compute_J(indices, dual_coef)
             
-            # Armijo's Rule??
+            # Armijo's Rule
+            
     
     def predict(self, X, y):
         pass
