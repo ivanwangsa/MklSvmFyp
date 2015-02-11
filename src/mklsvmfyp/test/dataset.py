@@ -8,28 +8,48 @@ import numpy as np
 from mklsvmfyp.classifier import Kernel, SilpMklSvm, SoftMargin1Svm
 from sklearn.svm.classes import SVC
 import os
+from numpy import std
 
 class DataSet:
     
-    def retrieve_sets(self, random_seed = 0, proportion = (2., 0., 1.)):
+    @staticmethod
+    def partition_set(self, dataset, proportion = (2., 0., 1.)):
+        X = dataset[0]
+        y = dataset[1]
+        N = X.shape[0]
+        partitioned_dataset = []
+        proportion = np.array(proportion) / sum(proportion) * N
+        num_prop = len(proportion)
+        indices = np.hstack(([0],np.ceil(np.cumsum(proportion))))
+        for i in range(num_prop):
+            partitioned_dataset.append((X[indices[i]:indices[i+1]], y[indices[i], indices[i+1]]))
+        return tuple(partitioned_dataset)
+    
+    @staticmethod
+    def normalize_feature_space(self, X, vec = None):
+        m = X.shape[1]
+        if vec == None:
+            res = []
+            for i in xrange(m):
+                mean = np.mean(X[:,i])
+                std = np.std(X[:,i])
+                X[:,i] = (X[:,i] - mean)/std
+                res.append((mean, std))
+            return res
+        elif len(vec) == m:
+            for i in range(m):
+                mean, std = vec[i]
+                X[:,i] = (X[:,i] - mean)/std
+            return vec
+        else:
+            return None
+    
+    def retrieve_sets(self, random_seed = 0):
         np.random.seed(random_seed)
         indices = np.arange(self._num_of_obs)
         np.random.shuffle(indices)
-        proportion = (proportion[0]/sum(proportion), proportion[1]/sum(proportion), proportion[2]/sum(proportion))
-        start_train = 0
-        start_valid = int(self._num_of_obs * proportion[0])
-        start_test  = int(self._num_of_obs * (proportion[0] + proportion[1]))
-        end = self._num_of_obs
         
-        training_set_indices = indices[start_train : start_valid]
-        validation_set_indices = indices[start_valid : start_test]
-        test_set_indices = indices[start_test : end]
-        
-        training_set = (self._X[training_set_indices], self._y[training_set_indices])
-        validation_set = (self._X[validation_set_indices], self._y[validation_set_indices])
-        test_set = (self._X[test_set_indices], self._y[test_set_indices])
-        
-        return (training_set, validation_set, test_set)
+        return self._X[indices], self._y[indices]
         
     def _load_ionosphere(self):
         __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
