@@ -106,6 +106,17 @@ class Kernel(object):
         def result(x,y):
             return np.tanh(kappa * np.dot(x.T, y) + a0)
         return result
+    
+    @staticmethod
+    def normalize(gram_matrix):
+        
+        ''' Input must be a numpy.matrix; so does output '''
+        N = gram_matrix.shape[0]
+        normalizer = np.matrix(np.zeros((1, N)))
+        for i in xrange(N):
+            normalizer[0, i] = 1./(gram_matrix[i,i] ** .5)
+        return np.multiply(gram_matrix, np.outer(normalizer, normalizer))
+                
         
 class Svm(BinaryClassifier):
     # TO DO: TOO SLOW!
@@ -187,16 +198,16 @@ class HardMarginSvm(Svm):
         
 
 class SoftMargin1Svm(Svm):
-    def fit(self, X, _y):
-        self._X = X
-        self._y = _y
+    def fit(self, X, y):
+        self._X = np.copy(X)
+        self._y = np.copy(y)
         
         n = X.shape[0]
-        yy = np.array([_y]).T
+        yy = np.array([y]).T
         
         N = self._compute_gram_matrix()
         
-        P = matrix(np.outer(_y,_y) * N)
+        P = matrix(np.outer(y,y) * N)
         q = matrix(-1., (n,1))
         
         G = matrix(np.vstack((-np.eye(n), np.eye(n))))
@@ -256,6 +267,7 @@ class SilpMklSvm(Svm):
             for i in xrange(n):
                 for j in xrange(n):
                     res[m][i,j] = kernels[m](X[i], X[j])
+            res[m] = Kernel.normalize(res[m])
         self._gram_matrices = tuple(res)
     
     def fit(self, X, y):
@@ -297,6 +309,7 @@ class SilpMklSvm(Svm):
         c = np.vstack(([[-1.]], np.zeros((K, 1))))
                
         while True:
+            print ">>>", beta
             gram_matrix = np.matrix(np.zeros((N, N)))
             for k in range(K):
                 gram_matrix += beta[k] * self._gram_matrices[k]
@@ -308,7 +321,7 @@ class SilpMklSvm(Svm):
                 num_of_rows_of_S *= 2
             S[t,] = np.array([S_k(supports, dual_coef, i) for i in range(K)])
             S_now = np.dot(beta, S[t,])
-            if np.abs(1-S_now/theta) < SILP_EPS:
+            if np.abs(1 - S_now/theta) < SILP_EPS:
                 break
             additional_A = np.hstack( ([1.], -S[t,:] ) )
             t += 1
@@ -325,6 +338,7 @@ class SilpMklSvm(Svm):
             gram_matrix += beta[k] * self._gram_matrices[k]
         
         self.single_svm_solver.fit(gram_matrix, self._y)
+        self._kernel_weights = beta
         self._beta = beta
                 
     def predict(self, X):
@@ -398,8 +412,7 @@ class SimpleMklSvm(Svm):
                     direction_mu -= direction[i]
             direction[max_idx] = direction_mu
             return max_idx, direction
-            
-            
+        
         while not terminated:
             combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
             indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
@@ -433,10 +446,11 @@ class SimpleMklSvm(Svm):
                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_dagger = compute_J(indices, dual_coef)
             
-            # Armijo's Rule
+            # TODO: Armijo's Rule ???
             
     
     def predict(self, X, y):
+        # TODO: complete this
         pass
     
     def __init__(self, kernels, constraint = 1.):
