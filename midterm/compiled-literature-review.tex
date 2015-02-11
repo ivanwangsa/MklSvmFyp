@@ -169,16 +169,5 @@ Thus we can minimize them as the parameters vary, and choose the parameters with
 \end{itemize}
 
 \section{Multiple Kernel Learning}
-Now consider a set of kernels $\mathcal{K}$. For each kernel $K\in\mathcal{K}$, we may define the following function
-\[\omega(K) = \max_{\bs \alpha}\left\{\sum_{i=1}^m\alpha_i-\frac12\sum_{i=1}^m\sum_{j=1}^m \alpha_i \alpha_j y_i y_j K(\bs x_i, \bs x_j) : \bs\alpha^T\bs y=0, \bs\alpha\succeq \bs 0\right\}.\]
-Now by stating the constraint explicitly and assuming that the dataset is linearly separable on the feature space, we have the following problem 
 
-\begin{center}
-\begin{tabular}{rll}
-\multicolumn{3}{l}{$\ds \min_{K\in\mathcal{K}} \omega(K) = \min_{K\in\mathcal{K}}\max_{\bs \alpha} \sum_{i=1}^m\alpha_i-\frac12\sum_{i=1}^m\sum_{j=1}^m \alpha_i\alpha_jK(\bs x_i,\bs x_j)$} \\
-with respect to & $K$, $\bs\alpha$ \\
-subject to & $\bs 0 \preceq\bs\alpha\preceq C\bs 1$ \\
- & $\bs\alpha^T\textbf{y}=0$
-\end{tabular}
-\end{center}
 \end{document}
