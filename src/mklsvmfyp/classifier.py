@@ -109,7 +109,6 @@ class Kernel(object):
     
     @staticmethod
     def normalize(gram_matrix):
-        
         ''' Input must be a numpy.matrix; so does output '''
         N = gram_matrix.shape[0]
         normalizer = np.matrix(np.zeros((1, N)))
@@ -117,6 +116,10 @@ class Kernel(object):
             normalizer[0, i] = 1./(gram_matrix[i,i] ** .5)
         return np.multiply(gram_matrix, np.outer(normalizer, normalizer))
                 
+    @staticmethod
+    def standardize(gram_matrix):
+        N = gram_matrix.shape[0]
+        return gram_matrix/(1./N * np.trace(gram_matrix) - 1./(N ** 2) * np.sum(gram_matrix))
         
 class Svm(BinaryClassifier):
     # TO DO: TOO SLOW!
