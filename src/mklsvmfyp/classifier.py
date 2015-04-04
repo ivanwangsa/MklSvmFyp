@@ -127,11 +127,12 @@ class Svm(BinaryClassifier):
         kernel = self._kernel
         X = self._X
         n = X.shape[0]
-        N = np.zeros((n, n))
+        gram_matrix = np.zeros((n, n))
         for i in xrange(n):
             for j in xrange(n):
-                N[i,j] = kernel(X[i], X[j])
-        return N
+                gram_matrix[i,j] = kernel(X[i], X[j])
+        return Kernel.standardize(gram_matrix)
+    
     def __init__(self):
         pass        
 
@@ -143,9 +144,9 @@ class HardMarginSvm(Svm):
         n = X.shape[0]
         yy = np.array([y]).T
         
-        N = self._compute_gram_matrix()
+        gram_matrix = self._compute_gram_matrix()
         
-        P = matrix(np.outer(y,y) * N)
+        P = matrix(np.outer(y,y) * gram_matrix)
         q = matrix(-1., (n,1))
         
         G = spmatrix(-1., range(n), range(n))
@@ -208,9 +209,11 @@ class SoftMargin1Svm(Svm):
         n = X.shape[0]
         yy = np.array([y]).T
         
-        N = self._compute_gram_matrix()
+        K = self._compute_gram_matrix()
         
-        P = matrix(np.outer(y,y) * N)
+        print np.outer(y,y) * K
+        
+        P = matrix(np.outer(y,y) * K)
         q = matrix(-1., (n,1))
         
         G = matrix(np.vstack((-np.eye(n), np.eye(n))))
@@ -270,7 +273,7 @@ class SilpMklSvm(Svm):
             for i in xrange(n):
                 for j in xrange(n):
                     res[m][i,j] = kernels[m](X[i], X[j])
-            res[m] = Kernel.normalize(res[m])
+            res[m] = Kernel.standardize(res[m])
         self._gram_matrices = tuple(res)
     
     def fit(self, X, y):
@@ -416,6 +419,7 @@ class SimpleMklSvm(Svm):
             direction[max_idx] = direction_mu
             return max_idx, direction
         
+        num_iter = 0
         while not terminated:
             combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
             indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
@@ -449,12 +453,42 @@ class SimpleMklSvm(Svm):
                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_dagger = compute_J(indices, dual_coef)
             
-            # TODO: Armijo's Rule ???
+            # refind J_d etc
+            combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
+            indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
+            J_d = compute_J(combined_gram_matrix, indices, dual_coef)
             
+            # Armijo's Rule
+            armijo_beta = 0.5
+            armijo_sigma = 0.1
+            gamma = gamma_max
+            armijo_terminated = False
+            while not armijo_terminated:
+                new_d = d + gamma*D
+                combined_gram_matrix = sum([new_d[k] * self._gram_matrices[k] for k in range(K)])
+                indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
+                new_J_d = compute_J(combined_gram_matrix, indices, dual_coef)
+                partials_new_J_d = compute_partials_J(indices, dual_coef)
+                if (J_d - new_J_d) >= armijo_sigma * np.sum(partials_new_J_d * gamma * D):
+                    armijo_terminated = True
+                else:
+                    gamma *= armijo_beta
+            d = d + gamma * D
+            num_iter += 1
+            if num_iter > 50:
+                terminated = True
+        self.kernel_coefficients = d    
+        self.fitted_combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
+        self.single_svm_solver.fit(self.fitted_combined_gram_matrix, self._y)
     
-    def predict(self, X, y):
-        # TODO: complete this
-        pass
+    def predict(self, X):
+        num_row_test = X.shape[0]
+        num_row_train = self._X.shape[0]
+        kernel_matrix = np.zeros((num_row_test, num_row_train))
+        for i in xrange(num_row_test):
+            for j in xrange(num_row_train):
+                kernel_matrix[i,j] = sum([self._beta[k] * self._kernels[k](X[i, ], self._X[j,]) for k in range(len(self._kernels))])
+        return np.array(self.single_svm_solver.predict(kernel_matrix))
     
     def __init__(self, kernels, constraint = 1.):
         self._kernels = kernels
