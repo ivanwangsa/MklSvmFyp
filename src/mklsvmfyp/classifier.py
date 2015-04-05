@@ -457,11 +457,6 @@ class SimpleMklSvm(Svm):
                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_d = compute_J(combined_gram_matrix, indices, dual_coef)
             
-            # refind J_d etc
-            combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
-            indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
-            J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-            
             # Armijo's Rule
             armijo_beta = 0.5
             armijo_sigma = 0.01
