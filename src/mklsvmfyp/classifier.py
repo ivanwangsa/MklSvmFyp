@@ -481,7 +481,7 @@ class SimpleMklSvm(Svm):
             d = d + gamma * D
             prev_J_d = J_d
             
-        self.kernel_coefficients = d    
+        self.kernel_coefficients = np.copy(d)    
         self.fitted_combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
         self.single_svm_solver.fit(self.fitted_combined_gram_matrix, self._y)
     
@@ -565,7 +565,7 @@ class ModifiedSimpleMklSvm(Svm):
                 combined_gram_matrix = sum([d[k] *  self._gram_matrices[k] for k in range(K)])
                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-                
+                                
                 if np.abs(prev_J_d - J_d) < SMKL_EPS:
                     terminated = True
                     break
@@ -651,8 +651,7 @@ class ModifiedSimpleMklSvm(Svm):
                 d = d + gamma * D
                 prev_J_d = J_d
                 num_iter += 1
-        
-        self.kernel_coefficients = d    
+        self.kernel_coefficients = np.copy(d)    
         self.fitted_combined_gram_matrix = sum([d[k] * self._gram_matrices[k] for k in range(K)])
         self.single_svm_solver.fit(self.fitted_combined_gram_matrix, self._y)
     
