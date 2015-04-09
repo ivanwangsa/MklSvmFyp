@@ -791,6 +791,9 @@ class PriorMklSvm(Svm):
                 kernel_matrix[i,j] = sum([self.kernel_coefficients[m] * self._kernels[m](X[i, ], self._X[j,]) for m in range(len(self._kernels))])
         return np.array(self.single_svm_solver.predict(kernel_matrix))
     
+    def set_constraint(self, new_constraint):
+        self._constraint = new_constraint
+    
     def __init__(self, kernels, constraint = 1., delta = 'ones', method = 'projected', normalize_kernels = True):
         self._kernels = tuple(kernels)
         self._constraint = constraint * 1.
