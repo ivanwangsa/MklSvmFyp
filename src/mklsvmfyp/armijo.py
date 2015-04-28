@@ -57,5 +57,6 @@ if __name__ == '__main__':
     
     plt.xlabel('Number of iteration')
     plt.ylabel('Step sizes')
-    plt.legend(loc = 'best')
-    plt.title('sigma = 0.9, beta = 0.1')
+    plt.legend(loc = 'best', prop={'size': 12})
+    plt.title('beta = 0.8, sigma = 0.2')
+    plt.show()

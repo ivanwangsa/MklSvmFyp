@@ -120,7 +120,6 @@ class Kernel(object):
     
         
 class Svm(BinaryClassifier):
-    # TO DO: TOO SLOW!
     def _compute_gram_matrix(self):
         kernel = self._kernel
         X = self._X
@@ -512,18 +511,21 @@ class PriorMklSvm(Svm):
                         res[m][i,j] /= np.sqrt(diag[i] * diag[j])
         self._gram_matrices = tuple(res)
         
-    def fit(self, X, y, compute = True):
-        if compute:
-            self._X = X
-            self._y = y
-            self._compute_gram_matrices()
+    def precompute(self, X, y):
+        self._X = X
+        self._y = y
+        self._compute_gram_matrices()
+    
+    def fit(self, X, y, precomputed = False):
+        if not precomputed:
+            self.precompute(X, y)
+            
         M = len(self._gram_matrices)
         self._num_of_kernels = M
         
         PMKL_EPS = 1e-6
         
         start = time.time()
-        
         d = np.array([1./(M*self._delta[m]) for m in range(M)])
         self.single_svm_solver = svm.SVC(C = self._constraint, kernel = 'precomputed')
         
@@ -532,7 +534,7 @@ class PriorMklSvm(Svm):
         def find_indices_and_dual_coef(gram_matrix):
             self.single_svm_solver.fit(gram_matrix, self._y)
             
-            # preparing indices of support vectors and their dual variables, similar to Silp code
+            # preparing indices of support vectors and their dual variables
             combined = zip(self.single_svm_solver.support_, self.single_svm_solver.dual_coef_[0])
             combined.sort()
             combined = zip(*combined)
@@ -579,16 +581,10 @@ class PriorMklSvm(Svm):
             num_iter = 0
             prev_J_d = 1e9
             while not stop_descent:
-#                 print d
                 combined_gram_matrix = sum([d[m] * self._gram_matrices[m] for m in range(M)])
                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_d = compute_J(combined_gram_matrix, indices, dual_coef)
                 grad_J_d = compute_partials_J(indices, dual_coef)
-                
-#                 duality_gap = (J_d - np.sum(np.absolute(dual_coef)) + np.max(-grad_J_d/ self._delta)) * 2
-#                 if duality_gap < PMKL_EPS or num_iter > 20 * M:
-#                     stop_descent = True
-#                     break
                 
                 if prev_J_d - J_d < PMKL_EPS or num_iter > 20 * M:
                     stop_descent = True
@@ -610,7 +606,6 @@ class PriorMklSvm(Svm):
                     if J_d >= J_d_bar and J_d - J_d_bar >= armijo_sigma * np.dot(grad_J_d_bar, d - d_bar):
                         armijo_terminated = True
                         self._steps.append(step_s)
-#                         print step_s
                         if self._armijo_modified:
                             s_bar = min(step_s/armijo_beta, 1.)
                         else:
@@ -627,17 +622,10 @@ class PriorMklSvm(Svm):
             num_iter = 0
             prev_J_d = 1e9
             while not stop_descent:
-#                 print d
                 combined_gram_matrix = sum([d[m] * self._gram_matrices[m] for m in range(M)])
                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
                 J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-#                 print J_d, 
                 grad_J_d = compute_partials_J(indices, dual_coef)
-#                 duality_gap = (J_d - np.sum(np.abs(dual_coef)) + np.max(-grad_J_d)) * 2
-#                 print J_d, duality_gap, d
-#                 if duality_gap < PMKL_EPS or num_iter > 20 * M:
-#                     stop_descent = True
-#                     break
                 
                 if prev_J_d - J_d < PMKL_EPS or num_iter > 20*M:
                     stop_descent = True
@@ -701,8 +689,11 @@ class PriorMklSvm(Svm):
                 kernel_matrix[i,j] = sum([self.kernel_coefficients[m] * self._kernels[m](X[i, ], self._X[j,]) for m in range(len(self._kernels))])
         return np.array(self.single_svm_solver.predict(kernel_matrix))
     
+    def set_delta(self, new_delta):
+        self._delta = np.array(new_delta)
+        
     def set_constraint(self, new_constraint):
-        self._constraint = new_constraint
+        self._constraint = new_constraint * 1.
         
     def set_method(self, new_method):
         self._method = new_method
@@ -725,173 +716,3 @@ class PriorMklSvm(Svm):
         self._armijo_beta = armijo_beta
         self._armijo_sigma = armijo_sigma
    
-# class ModifiedSimpleMklSvm(Svm):
-#     
-#     def _compute_gram_matrices(self):
-#         X = self._X
-#         n = self._X.shape[0]
-#         kernels = self._kernels
-#         res = [np.matrix(np.zeros((n,n))) for i in range(len(kernels))]
-#         for m in range(len(kernels)):
-#             for i in xrange(n):
-#                 for j in xrange(n):
-#                     res[m][i,j] = kernels[m](X[i], X[j])
-#         self._gram_matrices = tuple(res)
-#         
-#     def fit(self, X, y):
-#         self._X = X
-#         self._y = y
-#         self._compute_gram_matrices()
-#         M = len(self._gram_matrices)
-#         self._num_of_kernels = M
-#         
-#         SMKL_EPS = 1e-6
-#         
-#         d = np.repeat(1./M, M)
-#         self.single_svm_solver = svm.SVC(C = self._constraint, kernel = 'precomputed')
-#                 
-#         def find_indices_and_dual_coef(gram_matrix):
-#             self.single_svm_solver.fit(gram_matrix, self._y)
-#             
-#             # preparing indices of support vectors and their dual variables, similar to Silp code
-#             combined = zip(self.single_svm_solver.support_, self.single_svm_solver.dual_coef_[0])
-#             combined.sort()
-#             combined = zip(*combined)
-#             indices = combined[0]
-#             dual_coef = np.matrix(combined[1]).T
-#             return indices, dual_coef
-#         
-#         def compute_J(gram_matrix, indices, dual_coef):
-#             subset_gram_matrix = gram_matrix[indices,:][:,indices]
-#             res = -1.0/2 * dual_coef.T * subset_gram_matrix * dual_coef + np.sum(np.absolute(dual_coef))
-#             return res[0,0]
-#         
-#         def compute_partials_J(indices, dual_coef):
-#             a = np.array([(-1.0/2 * dual_coef.T * self._gram_matrices[m][indices,:][:,indices] * dual_coef)[0,0] for m in range(self._num_of_kernels)])
-#             return a
-#         
-#         def compute_direction(partial_derivatives):
-#             direction = np.repeat(None, self._num_of_kernels)
-#             max_idx = d.argmax()
-#             direction_mu = 0
-#             for i in range(self._num_of_kernels):
-#                 if d[i] < SMKL_EPS:
-#                     direction[i] = 0.
-#                 elif i != max_idx:
-#                     direction[i] = -partial_derivatives[i] + partial_derivatives[max_idx]
-#                     direction_mu -= direction[i]
-#             direction[max_idx] = direction_mu
-#             return max_idx, direction
-#         
-#         if self._method == 'reduced':
-#             num_iter = 0
-#             prev_J_d = 1e9
-#             terminated = False
-#             while not terminated:
-#                 combined_gram_matrix = sum([d[m] *  self._gram_matrices[m] for m in range(M)])
-#                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
-#                 J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-#                                 
-#                 if np.abs(prev_J_d - J_d) < SMKL_EPS:
-#                     terminated = True
-#                     break
-#                 
-#                 partial_derivatives = compute_partials_J(indices, dual_coef)
-#                 
-#                 largest_decrease_index = np.argmin(partial_derivatives)
-#                 D = [1. if m == largest_decrease_index else 0. for m in range(M)] - d
-#                 
-#                 # armijo's rule
-#                 armijo_beta = 0.9
-#                 armijo_sigma = 0.01
-#                 gamma_max = 1.0
-#                 gamma = gamma_max
-#                 armijo_terminated = False
-#                 while not armijo_terminated:
-#                     # print gamma
-#                     new_d = d + gamma*D
-#                     combined_gram_matrix = sum([new_d[m] * self._gram_matrices[m] for m in range(M)])
-#                     indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
-#                     new_J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-#                     partials_new_J_d = compute_partials_J(indices, dual_coef)
-#                     if (J_d - new_J_d) >= armijo_sigma * np.sum(partials_new_J_d * gamma * D):
-#                         armijo_terminated = True
-#                     else:
-#                         gamma *= armijo_beta
-#                 d = d + gamma * D
-#                 
-#                 prev_J_d = J_d
-#                 num_iter += 1
-#         elif self._method == 'projected':
-#             # normal vector = (1,..,1)
-#             normal_vector = np.repeat(1., M)
-#             terminated = False
-#             prev_J_d = 1e9
-#             num_iter = 0
-#             while not terminated:
-#                 combined_gram_matrix = sum([d[m] *  self._gram_matrices[m] for m in range(M)])
-#                 indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
-#                 J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-#                                 
-#                 if np.abs(prev_J_d - J_d) < SMKL_EPS:
-#                     terminated = True
-#                     break
-#                 
-#                 partial_derivatives = compute_partials_J(indices, dual_coef)
-#                 
-#                 D = -(partial_derivatives - sum(partial_derivatives)/M * normal_vector)
-#                 
-#                 # realign D using binary search
-#                 bs_min = 0.
-#                 bs_max = 1.
-#                 num_iter_bs = 40
-#                 while np.all(d + bs_max*D > 0):
-#                     bs_max *= 2
-#                     num_iter_bs += 1
-#                 bs_mid = (bs_min + bs_max)/2
-#                 
-#                 for bs_iter in range(num_iter_bs):  # @UnusedVariable
-#                     if np.all(d + bs_mid*D > 0):
-#                         bs_min = bs_mid
-#                     else:
-#                         bs_max = bs_mid
-#                     bs_mid = (bs_min + bs_max)/2
-#                     
-#                 D = bs_mid * D
-#                 # armijo's rule
-#                 armijo_beta = 0.9
-#                 armijo_sigma = 0.01
-#                 gamma_max = 1.0
-#                 gamma = gamma_max
-#                 armijo_terminated = False
-#                 while not armijo_terminated:
-#                     new_d = d + gamma*D
-#                     combined_gram_matrix = sum([new_d[m] * self._gram_matrices[m] for m in range(M)])
-#                     indices, dual_coef = find_indices_and_dual_coef(combined_gram_matrix)
-#                     new_J_d = compute_J(combined_gram_matrix, indices, dual_coef)
-#                     partials_new_J_d = compute_partials_J(indices, dual_coef)
-#                     if (J_d - new_J_d) >= armijo_sigma * np.sum(partials_new_J_d * gamma * D):
-#                         armijo_terminated = True
-#                     else:
-#                         gamma *= armijo_beta
-#                 d = d + gamma * D
-#                 prev_J_d = J_d
-#                 num_iter += 1
-#         self.kernel_coefficients = np.copy(d)    
-#         self.fitted_combined_gram_matrix = sum([d[m] * self._gram_matrices[m] for m in range(M)])
-#         self.single_svm_solver.fit(self.fitted_combined_gram_matrix, self._y)
-#     
-#     def predict(self, X):
-#         num_row_test = X.shape[0]
-#         num_row_train = self._X.shape[0]
-#         kernel_matrix = np.zeros((num_row_test, num_row_train))
-#         for i in xrange(num_row_test):
-#             for j in xrange(num_row_train):
-#                 kernel_matrix[i,j] = sum([self.kernel_coefficients[m] * self._kernels[m](X[i, ], self._X[j,]) for m in range(len(self._kernels))])
-#         return np.array(self.single_svm_solver.predict(kernel_matrix))
-#     
-#     def __init__(self, kernels, constraint = 1., method='reduced'):
-#         self._kernels = kernels
-#         self._constraint = constraint
-#         self._method = method
-#     
