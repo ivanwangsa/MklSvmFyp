@@ -501,14 +501,6 @@ class PriorMklSvm(Svm):
             for i in xrange(n):
                 for j in xrange(n):
                     res[m][i,j] = kernels[m](X[i], X[j])
-        if self._normalize_kernels:
-            for m in range(len(kernels)):
-                diag = np.zeros(n)
-                for i in xrange(n):
-                    diag[i] = res[m][i,i]
-                for i in xrange(n):
-                    for j in xrange(n):
-                        res[m][i,j] /= np.sqrt(diag[i] * diag[j])
         self._gram_matrices = tuple(res)
         
     def precompute(self, X, y):
@@ -521,20 +513,14 @@ class PriorMklSvm(Svm):
             self.precompute(X, y)
             
         M = len(self._gram_matrices)
-        self._num_of_kernels = M
-        
+        self._num_of_kernels = M        
         PMKL_EPS = 1e-6
         
-        start = time.time()
         d = np.array([1./(M*self._delta[m]) for m in range(M)])
         self.single_svm_solver = svm.SVC(C = self._constraint, kernel = 'precomputed')
         
-        self._steps = list()
-        
         def find_indices_and_dual_coef(gram_matrix):
             self.single_svm_solver.fit(gram_matrix, self._y)
-            
-            # preparing indices of support vectors and their dual variables
             combined = zip(self.single_svm_solver.support_, self.single_svm_solver.dual_coef_[0])
             combined.sort()
             combined = zip(*combined)
@@ -543,12 +529,10 @@ class PriorMklSvm(Svm):
             return indices, dual_coef
         
         def compute_J(gram_matrix, indices, dual_coef):
-            res = -1.0/2 * dual_coef.T * gram_matrix[indices,:][:,indices] * dual_coef + np.sum(np.absolute(dual_coef))
-            return res[0,0]
+            return (-1.0/2 * dual_coef.T * gram_matrix[indices,:][:,indices] * dual_coef + np.sum(np.absolute(dual_coef)))[0,0]
         
         def compute_partials_J(indices, dual_coef):
-            a = np.array([(-1.0/2 * dual_coef.T * self._gram_matrices[m][indices,:][:,indices] * dual_coef)[0,0] for m in range(M)])
-            return a
+            return np.array([(-1.0/2 * dual_coef.T * self._gram_matrices[m][indices,:][:,indices] * dual_coef)[0,0] for m in range(M)])
         
         if self._method == 'projected':
             def project(vector):
@@ -605,7 +589,6 @@ class PriorMklSvm(Svm):
                     grad_J_d_bar = compute_partials_J(indices, dual_coef)
                     if J_d >= J_d_bar and J_d - J_d_bar >= armijo_sigma * np.dot(grad_J_d_bar, d - d_bar):
                         armijo_terminated = True
-                        self._steps.append(step_s)
                         if self._armijo_modified:
                             s_bar = min(step_s/armijo_beta, 1.)
                         else:
@@ -648,7 +631,6 @@ class PriorMklSvm(Svm):
                     grad_J_d_bar = compute_partials_J(indices, dual_coef)
                     if J_d >= J_d_bar and J_d - J_d_bar >= armijo_sigma * np.dot(grad_J_d_bar, d - d_bar):
                         armijo_terminated = True
-                        self._steps.append(step_s)
                         if self._armijo_modified:
                             s_bar = min(step_s/armijo_beta, 1.)
                         else:
@@ -659,9 +641,7 @@ class PriorMklSvm(Svm):
                 num_iter += 1
                 prev_J_d = J_d
 
-        self.kernel_coefficients = np.copy(d)    
-        end = time.time()
-        self._time_elapsed = (end - start)
+        self.kernel_coefficients = np.copy(d)
         self.fitted_combined_gram_matrix = sum([d[m] * self._gram_matrices[m] for m in range(M)])
         def fn(x, y):
             ans = 0
@@ -704,14 +684,13 @@ class PriorMklSvm(Svm):
     def set_armijo_sigma(self, new_armijo_sigma):
         self._armijo_sigma = new_armijo_sigma
     
-    def __init__(self, kernels, constraint = 1., delta = 'ones', method = 'projected', normalize_kernels = True, armijo_modified = True, armijo_beta = 0.5, armijo_sigma = 0.5):
+    def __init__(self, kernels, constraint = 1., delta = 'ones', method = 'projected', armijo_modified = True, armijo_beta = 0.5, armijo_sigma = 0.5):
         self._kernels = tuple(kernels)
         self._constraint = constraint * 1.
         self._method = method
         if delta == 'ones':
             delta = np.repeat(1., len(kernels))
         self._delta = np.array(delta)
-        self._normalize_kernels = normalize_kernels
         self._armijo_modified = armijo_modified
         self._armijo_beta = armijo_beta
         self._armijo_sigma = armijo_sigma
